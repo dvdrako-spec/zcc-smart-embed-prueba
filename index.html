@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba Smart Embed ZCC</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; background: #f6f7f9; color: #1c1e21; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  .barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-bottom: 14px; }
+  label { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
+  input { padding: 6px 8px; font-size: 14px; border: 1px solid #bbb; border-radius: 6px; }
+  button { padding: 8px 14px; font-size: 14px; border: 0; border-radius: 6px; background: #0b5cff; color: #fff; cursor: pointer; }
+  .cols { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  #zoom-embeddable-phone-iframe { height: 700px; width: 840px; max-width: 100%; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+  #log { flex: 1; min-width: 300px; height: 700px; overflow: auto; white-space: pre-wrap; margin: 0;
+         background: #111; color: #cfe8cf; padding: 10px; font-size: 12px; border-radius: 8px; }
+  .enlace { color: #ffd479; }
+</style>
+</head>
+<body>
+<h1>Prueba de llamada con Zoom Contact Center (Smart Embed)</h1>
+
+<div class="barra">
+  <label>Ticket (simulado)<input id="ticket" value="12345" size="10"></label>
+  <label>Teléfono a llamar<input id="tel" placeholder="+34XXXXXXXXX" size="18"></label>
+  <button id="llamar">Llamar</button>
+</div>
+
+<div class="cols">
+  <div id="contenedor"></div>
+  <pre id="log"></pre>
+</div>
+
+<script>
+  // Si usáis SSO con URL personalizada (vanity), cambia a: https://TU_VANITY.zoom.us/cci/callbar/crm/?origin=...
+  const BASE_SMART_EMBED = "https://zoom.us/cci/callbar/crm/";
+  // Opcional: URL interna a la que avisar del enlace llamada <-> ticket. Vacío = solo se muestra en pantalla.
+  const REGISTRO_URL = "";
+
+  const log = document.getElementById("log");
+  const escribe = (txt, clase) => {
+    const l = document.createElement("div");
+    if (clase) l.className = clase;
+    l.textContent = new Date().toLocaleTimeString("es-ES") + "  " + txt;
+    log.appendChild(l);
+    log.scrollTop = log.scrollHeight;
+  };
+
+  // El origen debe coincidir con el dominio permitido en la integración de Zoom
+  const iframe = document.createElement("iframe");
+  iframe.id = "zoom-embeddable-phone-iframe";
+  iframe.src = BASE_SMART_EMBED + "?origin=" + location.origin;
+  iframe.setAttribute("sandbox", "allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-downloads");
+  iframe.setAttribute("allow", ";autoplay;microphone;camera;display-capture;midi;encrypted-media;clipboard-write;");
+  document.getElementById("contenedor").appendChild(iframe);
+
+  const llamadaTicket = {};   // engagementId -> ticket
+  let ticketEnCurso = null;   // ticket de la última llamada pedida
+
+  async function registrar(engagementId, ticket) {
+    llamadaTicket[engagementId] = ticket;
+    escribe(`ENLACE: llamada ${engagementId} <-> ticket ${ticket}`, "enlace");
+    if (!REGISTRO_URL) return;
+    try {
+      await fetch(REGISTRO_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engagementId, ticket }),
+      });
+    } catch (e) { escribe("No se pudo avisar a REGISTRO_URL: " + e.message); }
+  }
+
+  window.addEventListener("message", (e) => {
+    // Solo mensajes de Zoom
+    let host = "";
+    try { host = new URL(e.origin).hostname; } catch { return; }
+    if (!host.endsWith("zoom.us")) return;
+
+    const m = e.data;
+    if (!m || typeof m.type !== "string" || !m.type.startsWith("zcc-")) return;
+
+    escribe(m.type + (m.data ? "  " + JSON.stringify(m.data) : ""));
+
+    if (m.type === "zcc-init-config-request") {
+      iframe.contentWindow.postMessage(
+        { type: "zcc-init-config-response", data: { phone: { screenPopEvent: "RINGING" } } }, "*");
+    }
+    if (m.type === "zcc-outbound-call-started" && m.data?.engagementId && ticketEnCurso) {
+      registrar(m.data.engagementId, ticketEnCurso);
+    }
+    if (m.type === "zcc-phone-call-log") {
+      const id = m.data?.engagementId;
+      escribe(`FIN: llamada ${id} del ticket ${llamadaTicket[id] ?? "(sin enlace)"}`, "enlace");
+    }
+  });
+
+  document.getElementById("llamar").addEventListener("click", () => {
+    const phone = document.getElementById("tel").value.trim();
+    const ticket = document.getElementById("ticket").value.trim();
+    if (!phone) { escribe("Falta el teléfono"); return; }
+    ticketEnCurso = ticket;
+    escribe(`Pidiendo llamada a ${phone} (ticket ${ticket})`);
+    iframe.contentWindow.postMessage(
+      { type: "onclicktoact", data: { id: ticket, name: "Ticket " + ticket, phone, userEntity: "ticket" } }, "*");
+  });
+</script>
+</body>
+</html>
