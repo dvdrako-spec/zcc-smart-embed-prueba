@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Softphone ZCC</title>
+<style>
+  html,body{margin:0;height:100%;font-family:system-ui,sans-serif}
+  #estado{font-size:12px;padding:4px 8px;background:#f4f4f4;border-bottom:1px solid #ddd;height:24px}
+  #zoom-embeddable-phone-iframe{width:100%;height:calc(100% - 30px);border:0}
+</style>
+</head>
+<body>
+<div id="estado">Esperando a Freshservice…</div>
+<script>
+  // Softphone de Zoom en su propia ventana. Habla con la app de Freshservice que la abrió.
+  // Solo acepta órdenes de estos orígenes:
+  const PADRES_PERMITIDOS = ["http://localhost:10001", "https://lanmedia.freshservice.com"];
+  const BASE_SMART_EMBED = "https://zoom.us/cci/callbar/crm/";
+
+  const padre = window.opener || (window.parent !== window ? window.parent : null);
+  let padreOrigen = null;
+  const estado = document.getElementById("estado");
+
+  const iframe = document.createElement("iframe");
+  iframe.id = "zoom-embeddable-phone-iframe";
+  iframe.src = BASE_SMART_EMBED + "?origin=" + location.origin;
+  iframe.setAttribute("sandbox", "allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-downloads");
+  iframe.setAttribute("allow", ";autoplay;microphone;camera;display-capture;midi;encrypted-media;clipboard-write;");
+  document.body.appendChild(iframe);
+
+  const avisarPadre = (msg) => {
+    if (padre && padreOrigen) padre.postMessage(msg, padreOrigen);
+  };
+
+  window.addEventListener("message", (e) => {
+    // Órdenes de la app de Freshservice
+    if (padre && e.source === padre && PADRES_PERMITIDOS.includes(e.origin)) {
+      padreOrigen = e.origin;
+      const m = e.data;
+      if (m && m.type === "puente-hola") {
+        estado.textContent = "Conectado con Freshservice";
+        avisarPadre({ type: "puente-listo" });
+      }
+      if (m && m.type === "puente-llamar" && m.phone) {
+        estado.textContent = "Llamando (ticket " + m.ticket + ")";
+        iframe.contentWindow.postMessage(
+          { type: "onclicktoact", data: { id: String(m.ticket), name: "Ticket " + m.ticket, phone: String(m.phone), userEntity: "ticket" } }, "*");
+      }
+      return;
+    }
+    // Eventos de Zoom
+    let host = "";
+    try { host = new URL(e.origin).hostname; } catch { return; }
+    if (!host.endsWith("zoom.us")) return;
+    const z = e.data;
+    if (!z || typeof z.type !== "string" || !z.type.startsWith("zcc-")) return;
+    if (z.type === "zcc-init-config-request") {
+      iframe.contentWindow.postMessage({ type: "zcc-init-config-response", data: { phone: { screenPopEvent: "RINGING" } } }, "*");
+    }
+    avisarPadre({ type: "puente-evento", evento: z.type, data: z.data || null });
+  });
+</script>
+</body>
+</html>
