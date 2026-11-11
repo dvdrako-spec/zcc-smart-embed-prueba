@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo helpdesk + ZCC</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,sans-serif;background:#f3f4f7;color:#1c1e21;display:flex;height:100vh;overflow:hidden}
+  .rail{width:52px;background:#fff;border-right:1px solid #e1e3e8;display:flex;flex-direction:column;align-items:center;padding-top:12px;gap:10px}
+  .rail button{width:38px;height:38px;border:0;border-radius:8px;background:transparent;font-size:18px;cursor:pointer}
+  .rail button:hover,.rail button.on{background:#e6efff}
+  main{flex:1;overflow:auto;padding:16px 20px;min-width:0}
+  .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  h1{font-size:18px;margin:0}
+  .cols{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .card{background:#fff;border:1px solid #e1e3e8;border-radius:10px;padding:14px;margin-bottom:12px}
+  .hilo{flex:1;min-width:320px}
+  .lado{width:300px}
+  .nota{background:#fff4e5;border:1px solid #f1c78a;border-radius:8px;padding:10px;margin-bottom:10px;font-size:14px;white-space:pre-wrap}
+  .nota b{display:block;font-size:13px;margin-bottom:4px;color:#0b5cff}
+  .tel{display:flex;align-items:center;gap:8px}
+  .llamar{border:0;background:#0b5cff;color:#fff;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px}
+  .etq{font-size:12px;color:#666}
+  #panel{width:0;transition:width .2s;background:#fff;border-left:1px solid #e1e3e8;overflow:hidden;display:flex;flex-direction:column}
+  #panel.abierto{width:380px}
+  #panel .cab{padding:8px 12px;font-size:13px;border-bottom:1px solid #e1e3e8;display:flex;justify-content:space-between}
+  #zoom-embeddable-phone-iframe{flex:1;width:100%;border:0;min-height:520px}
+  #log{height:150px;overflow:auto;background:#111;color:#cfe8cf;font-size:11px;padding:6px;white-space:pre-wrap}
+  .enlace{color:#ffd479}
+  input{padding:6px 8px;border:1px solid #bbb;border-radius:6px;font-size:14px;width:100%}
+  .rail.der{border-right:0;border-left:1px solid #e1e3e8}
+  .zc{display:inline-block;width:26px;height:26px;line-height:26px;border-radius:50%;background:#e5342f;color:#fff;font-size:14px}
+  #panel .cab a{text-decoration:none;color:#333;margin-left:8px;cursor:pointer}
+  #panel.flotante{position:fixed;right:80px;bottom:20px;width:380px;height:600px;border:1px solid #999;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.3);z-index:50;resize:both;min-width:300px;min-height:300px}
+  #panel.flotante .cab{cursor:move;background:#f0f0f0}
+  #panel:not(.abierto){display:none}
+</style>
+</head>
+<body>
+<div class="rail"><button class="on" title="Tickets">🎫</button></div>
+
+<main>
+  <div class="top"><h1>#INC-99999 · Ticket de prueba (datos ficticios)</h1><span class="etq">Demo, no es Freshservice</span></div>
+  <div class="cols">
+    <div class="hilo">
+      <div class="card">
+        <b>Asunto:</b> Prueba de llamada saliente<br>
+        <span class="etq">Estado: Abierto · Prioridad: Baja</span>
+      </div>
+      <div id="notas">
+        <div class="nota"><b>Nota privada (ejemplo)</b>Cliente solicita que se le devuelva la llamada.</div>
+      </div>
+    </div>
+    <div class="lado">
+      <div class="card">
+        <div class="etq">Contacto</div>
+        <b>Cliente de prueba</b>
+        <div class="etq" style="margin-top:8px">Teléfono (edítalo)</div>
+        <div class="tel"><input id="tel" placeholder="+34XXXXXXXXX"><button class="llamar" id="llamar">📞 Llamar</button></div>
+      </div>
+      <div class="card">
+        <div class="etq">Registro de eventos de Zoom</div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<aside id="panel">
+  <div class="cab" id="cab"><span>Zoom Contact Center</span>
+    <span><a href="#" id="desacoplar" title="Desacoplar / acoplar">⇱</a> <a href="#" id="cerrar" title="Cerrar">✕</a></span></div>
+</aside>
+<div class="rail der"><button id="btnTel" title="Zoom Contact Center"><span class="zc">☎</span></button></div>
+
+<script>
+  const BASE_SMART_EMBED = "https://zoom.us/cci/callbar/crm/";
+  const TICKET = "99999";
+  const panel = document.getElementById("panel");
+  const log = document.getElementById("log");
+  const escribe=(t,c)=>{const l=document.createElement("div");if(c)l.className=c;l.textContent=new Date().toLocaleTimeString("es-ES")+"  "+t;log.appendChild(l);log.scrollTop=log.scrollHeight;};
+
+  const iframe=document.createElement("iframe");
+  iframe.id="zoom-embeddable-phone-iframe";
+  iframe.src=BASE_SMART_EMBED+"?origin="+location.origin;
+  iframe.setAttribute("sandbox","allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-downloads");
+  iframe.setAttribute("allow",";autoplay;microphone;camera;display-capture;midi;encrypted-media;clipboard-write;");
+  panel.appendChild(iframe);
+
+  const abrir=()=>panel.classList.add("abierto");
+  document.getElementById("btnTel").onclick=()=>panel.classList.toggle("abierto");
+  document.getElementById("cerrar").onclick=(e)=>{e.preventDefault();panel.classList.remove("abierto");};
+  document.getElementById("desacoplar").onclick=(e)=>{e.preventDefault();panel.classList.toggle("flotante");panel.style.left="";panel.style.top="";panel.style.right="";panel.style.bottom="";};
+  // arrastrar el panel flotante por la cabecera
+  (()=>{const cab=document.getElementById("cab");let d=null;
+    cab.addEventListener("mousedown",e=>{if(!panel.classList.contains("flotante")||e.target.tagName==="A")return;
+      const r=panel.getBoundingClientRect();d={x:e.clientX-r.left,y:e.clientY-r.top};iframe.style.pointerEvents="none";e.preventDefault();});
+    window.addEventListener("mousemove",e=>{if(!d)return;panel.style.left=(e.clientX-d.x)+"px";panel.style.top=(e.clientY-d.y)+"px";panel.style.right="auto";panel.style.bottom="auto";});
+    window.addEventListener("mouseup",()=>{d=null;iframe.style.pointerEvents="";});})();
+
+  const enlaces={};
+  function nota(texto){
+    const d=document.createElement("div");d.className="nota";
+    d.innerHTML="<b>Registro automático de llamada</b>";
+    d.appendChild(document.createTextNode(texto));
+    document.getElementById("notas").prepend(d);
+  }
+
+  window.addEventListener("message",(e)=>{
+    let host="";try{host=new URL(e.origin).hostname;}catch{return;}
+    if(!host.endsWith("zoom.us"))return;
+    const m=e.data;
+    if(!m||typeof m.type!=="string"||!m.type.startsWith("zcc-"))return;
+    escribe(m.type+(m.data?"  "+JSON.stringify(m.data):""));
+    if(m.type==="zcc-init-config-request"){
+      iframe.contentWindow.postMessage({type:"zcc-init-config-response",data:{phone:{screenPopEvent:"RINGING"}}},"*");
+    }
+    if(m.type==="zcc-outbound-call-started"&&m.data?.engagementId){
+      enlaces[m.data.engagementId]=TICKET;
+      escribe(`ENLACE: llamada ${m.data.engagementId} <-> ticket ${TICKET}`,"enlace");
+      nota(`Llamada saliente iniciada (engagement ${m.data.engagementId}).`);
+    }
+    if(m.type==="zcc-phone-call-log"){
+      const id=m.data?.engagementId;
+      escribe(`FIN: llamada ${id} del ticket ${enlaces[id]??"(sin enlace)"}`,"enlace");
+      nota(`Llamada finalizada (engagement ${id}).`);
+    }
+  });
+
+  document.getElementById("llamar").onclick=()=>{
+    const phone=document.getElementById("tel").value.trim();
+    if(!phone){escribe("Falta el teléfono");return;}
+    abrir();
+    escribe(`Pidiendo llamada a ${phone} (ticket ${TICKET})`);
+    iframe.contentWindow.postMessage({type:"onclicktoact",data:{id:TICKET,name:"Ticket "+TICKET,phone,userEntity:"ticket"}},"*");
+  };
+</script>
+</body>
+</html>
