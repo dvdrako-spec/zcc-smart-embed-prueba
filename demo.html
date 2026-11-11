@@ -5,45 +5,126 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Demo helpdesk + ZCC</title>
 <style>
+  :root{--azul:#0b5cff;--borde:#e1e3e8;--nota:#fdeedd;--notab:#f1c78a;--txt:#1c1e21;--gris:#6b7280}
   *{box-sizing:border-box}
-  body{margin:0;background:#e9eaee;font-family:system-ui,sans-serif}
-  #escena{position:relative;width:100%;max-width:1227px;margin:0 auto}
-  #escena img{display:block;width:100%;height:auto}
-  .px{position:absolute}                       /* posiciones en % de la imagen 1227x749 */
-  #zoomIcono{left:calc(1197/1227*100%);top:calc(342/749*100%);width:calc(24/1227*100%);height:calc(24/749*100%);
-             border:2px solid #e5342f;border-radius:6px;background:rgba(229,52,47,.12);cursor:pointer;padding:0}
-  #zoomIcono:hover{background:rgba(229,52,47,.3)}
-  #nombre{left:calc(955/1227*100%);top:calc(262/749*100%);font-size:clamp(9px,1.15vw,14px);font-weight:600;color:#0b5cff}
-  #caja{left:calc(922/1227*100%);top:calc(318/749*100%);width:calc(248/1227*100%);display:flex;gap:4px;background:#fff}
-  #caja input{flex:1;min-width:0;padding:4px 6px;border:1px solid #bbb;border-radius:6px;font-size:12px}
-  #caja button{border:0;background:#0b5cff;color:#fff;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px}
-  #panel{position:fixed;right:56px;top:56px;width:380px;height:calc(100vh - 76px);background:#fff;border:1px solid #bbb;border-radius:10px;
-         box-shadow:0 8px 30px rgba(0,0,0,.3);display:none;flex-direction:column;z-index:50;resize:both;overflow:hidden;min-width:300px;min-height:300px}
-  #panel.abierto{display:flex}
-  #panel .cab{padding:8px 12px;font-size:13px;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;background:#f4f4f4;cursor:move;user-select:none}
-  #panel .cab a{text-decoration:none;color:#333;margin-left:10px;cursor:pointer}
+  html,body{height:100%}
+  body{margin:0;font-family:system-ui,sans-serif;color:var(--txt);background:#f3f4f7;display:flex;font-size:14px}
+  /* barras de iconos */
+  .rail{width:52px;flex:none;background:#fff;display:flex;flex-direction:column;align-items:center;padding-top:12px;gap:8px}
+  .rail.izq{border-right:1px solid var(--borde);background:#fdeef0}
+  .rail.der{border-left:1px solid var(--borde)}
+  .ic{width:34px;height:34px;border:0;border-radius:8px;background:transparent;font-size:16px;color:var(--gris);display:flex;align-items:center;justify-content:center}
+  .ic.on{background:#fbd5da;color:#c0263a}
+  .ic.fijo{cursor:default}
+  #zoomIcono{cursor:pointer;color:#fff;background:#e5342f;border-radius:50%;width:28px;height:28px;font-size:14px;margin:2px 0;outline:3px solid transparent;transition:.15s}
+  #zoomIcono:hover{outline-color:rgba(229,52,47,.3)}
+  #zoomIcono.activo{outline-color:rgba(229,52,47,.5)}
+  /* centro */
+  .centro{flex:1;min-width:0;display:flex;flex-direction:column}
+  .top{height:56px;flex:none;background:linear-gradient(#fdeef0,#fff);border-bottom:1px solid var(--borde);display:flex;align-items:center;gap:16px;padding:0 16px}
+  .top .ruta{color:var(--azul);font-weight:600}
+  .buscar{flex:1;max-width:380px;margin:0 auto;border:1px solid var(--borde);background:#fff;border-radius:8px;padding:7px 12px;color:var(--gris)}
+  .demo{font-size:11px;color:var(--gris);border:1px dashed #bbb;border-radius:6px;padding:2px 8px}
+  .cuerpo{flex:1;min-height:0;display:flex;flex-direction:column;margin:12px 16px 0;background:#fff;border:1px solid var(--borde);border-radius:12px 12px 0 0}
+  .cab{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--borde)}
+  .cab h1{font-size:16px;margin:0;flex:1}
+  .btn{border:1px solid var(--borde);background:#fff;border-radius:7px;padding:6px 12px;font-size:13px}
+  .tabs{display:flex;gap:22px;padding:0 20px;border-bottom:1px solid var(--borde);font-size:13px;color:var(--gris)}
+  .tabs span{padding:10px 0}
+  .tabs .on{color:var(--azul);font-weight:600;border-bottom:2px solid var(--azul)}
+  .grid{flex:1;min-height:0;display:flex;gap:16px;padding:16px;background:#f9fafb;border-radius:0}
+  .hilo{flex:1;min-width:0;overflow:auto}
+  .lado{width:290px;flex:none;overflow:auto}
+  .nota{background:var(--nota);border:1px solid var(--notab);border-radius:10px;padding:12px 14px;margin-bottom:12px;white-space:pre-wrap;line-height:1.45}
+  .nota .quien{color:var(--azul);font-weight:600;font-size:13px}
+  .nota .cuando{color:var(--gris);font-size:12px;margin-bottom:8px}
+  .nota.nueva{animation:ent .5s}
+  @keyframes ent{from{background:#fff3a8}to{background:var(--nota)}}
+  .acciones{display:flex;gap:8px;background:#f1f2f5;border-radius:10px;padding:10px;margin-bottom:12px}
+  .panel{background:#fff;border:1px solid var(--borde);border-radius:10px;padding:12px;margin-bottom:12px}
+  .panel h3{margin:0 0 8px;font-size:13px}
+  .etq{font-size:12px;color:var(--gris)}
+  .chip{display:inline-block;background:#dbeafe;color:#1e40af;border-radius:6px;padding:2px 8px;font-size:12px}
+  .tel{display:flex;gap:6px;margin-top:8px}
+  .tel input{flex:1;min-width:0;padding:6px 8px;border:1px solid #bbb;border-radius:6px;font-size:13px}
+  .tel button{border:0;background:var(--azul);color:#fff;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px}
+  /* softphone flotante */
+  #sp{position:fixed;right:70px;top:66px;width:380px;height:calc(100vh - 90px);min-width:300px;min-height:300px;resize:both;overflow:hidden;
+      display:none;flex-direction:column;background:#fff;border:1px solid #999;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.3);z-index:50}
+  #sp.abierto{display:flex}
+  #sp .cabsp{padding:8px 12px;font-size:13px;background:#f4f4f4;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;cursor:move;user-select:none}
+  #sp .cabsp a{cursor:pointer;margin-left:10px;color:#333}
   #zoom-embeddable-phone-iframe{flex:1;width:100%;border:0}
-  #log{max-width:1227px;margin:8px auto;height:140px;overflow:auto;background:#111;color:#cfe8cf;font-size:11px;padding:8px;white-space:pre-wrap;border-radius:8px}
+  /* registro */
+  #log{position:fixed;left:68px;bottom:0;width:340px;height:120px;overflow:auto;background:#111;color:#cfe8cf;font-size:11px;padding:6px;white-space:pre-wrap;border-radius:8px 8px 0 0;opacity:.92}
+  #log.oculto{display:none}
   .enlace{color:#ffd479}
+  @media(max-width:900px){.lado{display:none}}
 </style>
 </head>
 <body>
-<div id="escena">
-  <img src="demo-fresh.png" alt="Ticket de ejemplo">
-  <button class="px" id="zoomIcono" title="Zoom Contact Center"></button>
-  <div class="px" id="nombre">Cliente de prueba</div>
-  <div class="px" id="caja"><input id="tel" placeholder="+34XXXXXXXXX"><button id="llamar">📞 Llamar</button></div>
-</div>
-<div id="log"></div>
 
-<aside id="panel">
-  <div class="cab" id="cab"><span>Zoom Contact Center</span><span><a id="cerrar" title="Cerrar">✕</a></span></div>
-</aside>
+<div class="rail izq">
+  <div class="ic">▦</div><div class="ic">◔</div><div class="ic on">🎫</div><div class="ic">⚙</div><div class="ic">⋯</div>
+</div>
+
+<div class="centro">
+  <div class="top">
+    <span class="ruta">Tickets › #INC-99999</span>
+    <div class="buscar">Buscar</div>
+    <span class="demo">Demo · datos ficticios</span>
+    <span class="demo" id="verLog" style="cursor:pointer">registro</span>
+  </div>
+
+  <div class="cuerpo">
+    <div class="cab">
+      <h1>[24x7 Servicio] Migración a Contact Center</h1>
+      <span class="btn">Compartir ▾</span><span class="btn">Editar</span><span class="btn">Responder ▾</span><span class="btn">Asociar ▾</span><span class="btn">Cerrar</span>
+    </div>
+    <div class="tabs"><span class="on">Detalles</span><span>Tickets relacionados</span><span>Tareas</span><span>Activos</span><span>Asociaciones</span><span>Servicios afectados</span></div>
+
+    <div class="grid">
+      <div class="hilo">
+        <div class="nota"><div class="quien">Automatización</div><div class="cuando">Nota privada · hoy 10:19</div>Cliente indica que el problema sigue ocurriendo y solicita solución urgente. Cliente solicita hablar con su técnico asignado.</div>
+        <div class="nota"><div class="quien">Automatización</div><div class="cuando">Nota privada · hoy 10:19</div>Nota de llamada (Contact Center)
+Fecha: 11/11/2026, 10:18:36
+
+Ticket: 99999
+Motivo del contacto
+El cliente contactó por tres incidencias. Sentimiento: negativo.
+Resultado y conclusión
+Las incidencias siguen sin resolver.</div>
+        <div id="nuevas"></div>
+        <div class="acciones"><span class="btn">↩ Responder</span><span class="btn">↪ Reenviar</span><span class="btn">Añadir nota</span></div>
+      </div>
+
+      <div class="lado">
+        <div class="panel"><h3>DET-Otros</h3><div class="etq">Prioridad: Baja</div><div style="margin-top:6px"><span class="chip">SLA en pausa</span></div></div>
+        <div class="panel">
+          <h3>Información de contacto</h3>
+          <b style="color:var(--azul)">Cliente de prueba</b>
+          <div class="etq">Dirección de Soporte</div>
+          <div class="tel"><input id="tel" placeholder="+34XXXXXXXXX"><button id="llamar">📞 Llamar</button></div>
+        </div>
+        <div class="panel"><h3>Propiedades</h3><div class="etq">Prioridad: Baja · Estado: Abierto</div><div class="etq">Origen: Teléfono · Tipo: Incidencia</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="rail der">
+  <div class="ic fijo">ⓘ</div><div class="ic fijo">👤</div><div class="ic fijo">💬</div><div class="ic fijo">📝</div><div class="ic fijo">🕒</div>
+  <button class="ic" id="zoomIcono" title="Zoom Contact Center">☎</button>
+  <div class="ic fijo">⚡</div><div class="ic fijo">🧾</div>
+</div>
+
+<aside id="sp"><div class="cabsp" id="cabsp"><span>Zoom Contact Center</span><span><a id="cerrar" title="Cerrar">✕</a></span></div></aside>
+<div id="log"></div>
 
 <script>
   const BASE_SMART_EMBED="https://zoom.us/cci/callbar/crm/";
-  const TICKET="61542";   // el de la captura; solo para la demo
-  const panel=document.getElementById("panel"), log=document.getElementById("log");
+  const TICKET="99999";
+  const sp=document.getElementById("sp"), log=document.getElementById("log"), icono=document.getElementById("zoomIcono");
   const escribe=(t,c)=>{const l=document.createElement("div");if(c)l.className=c;l.textContent=new Date().toLocaleTimeString("es-ES")+"  "+t;log.appendChild(l);log.scrollTop=log.scrollHeight;};
 
   const iframe=document.createElement("iframe");
@@ -51,20 +132,32 @@
   iframe.src=BASE_SMART_EMBED+"?origin="+location.origin;
   iframe.setAttribute("sandbox","allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-downloads");
   iframe.setAttribute("allow",";autoplay;microphone;camera;display-capture;midi;encrypted-media;clipboard-write;");
-  panel.appendChild(iframe);
+  sp.appendChild(iframe);
 
-  document.getElementById("zoomIcono").onclick=()=>panel.classList.toggle("abierto");
-  document.getElementById("cerrar").onclick=()=>panel.classList.remove("abierto");
+  const abrir=(v)=>{sp.classList.toggle("abierto",v);icono.classList.toggle("activo",sp.classList.contains("abierto"));};
+  icono.onclick=()=>abrir();
+  document.getElementById("cerrar").onclick=()=>abrir(false);
+  document.getElementById("verLog").onclick=()=>log.classList.toggle("oculto");
 
-  // el panel es flotante: se arrastra por la cabecera
-  (()=>{const cab=document.getElementById("cab");let d=null;
-    cab.addEventListener("mousedown",e=>{if(e.target.tagName==="A")return;const r=panel.getBoundingClientRect();
+  // softphone flotante: se arrastra por la cabecera
+  (()=>{const cab=document.getElementById("cabsp");let d=null;
+    cab.addEventListener("mousedown",e=>{if(e.target.tagName==="A")return;const r=sp.getBoundingClientRect();
       d={x:e.clientX-r.left,y:e.clientY-r.top};iframe.style.pointerEvents="none";e.preventDefault();});
-    window.addEventListener("mousemove",e=>{if(!d)return;panel.style.left=(e.clientX-d.x)+"px";panel.style.top=(e.clientY-d.y)+"px";panel.style.right="auto";});
-    window.addEventListener("mouseup",()=>{d=null;iframe.style.pointerEvents="";});})();
+    addEventListener("mousemove",e=>{if(!d)return;sp.style.left=(e.clientX-d.x)+"px";sp.style.top=(e.clientY-d.y)+"px";sp.style.right="auto";});
+    addEventListener("mouseup",()=>{d=null;iframe.style.pointerEvents="";});})();
+
+  // añade una nota privada simulada al hilo
+  function nota(titulo,texto){
+    const d=document.createElement("div");d.className="nota nueva";
+    const hora=new Date().toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"});
+    d.innerHTML='<div class="quien">Automatización</div><div class="cuando">Nota privada · hoy '+hora+'</div>';
+    d.appendChild(document.createTextNode(titulo+"\n"+texto));
+    document.getElementById("nuevas").appendChild(d);
+    d.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
 
   const enlaces={};
-  window.addEventListener("message",(e)=>{
+  addEventListener("message",(e)=>{
     let host="";try{host=new URL(e.origin).hostname;}catch{return;}
     if(!host.endsWith("zoom.us"))return;
     const m=e.data;
@@ -75,17 +168,19 @@
     if(m.type==="zcc-outbound-call-started"&&m.data?.engagementId){
       enlaces[m.data.engagementId]=TICKET;
       escribe(`ENLACE: llamada ${m.data.engagementId} <-> ticket ${TICKET}`,"enlace");
+      nota("Llamada saliente iniciada","Engagement: "+m.data.engagementId);
     }
     if(m.type==="zcc-phone-call-log"){
       const id=m.data?.engagementId;
       escribe(`FIN: llamada ${id} del ticket ${enlaces[id]??"(sin enlace)"}`,"enlace");
+      nota("Llamada finalizada","Engagement: "+id);
     }
   });
 
   document.getElementById("llamar").onclick=()=>{
     const phone=document.getElementById("tel").value.trim();
-    if(!phone){escribe("Falta el teléfono");return;}
-    panel.classList.add("abierto");
+    if(!phone){escribe("Falta el teléfono");log.classList.remove("oculto");return;}
+    abrir(true);
     escribe(`Pidiendo llamada a ${phone} (ticket ${TICKET})`);
     iframe.contentWindow.postMessage({type:"onclicktoact",data:{id:TICKET,name:"Ticket "+TICKET,phone,userEntity:"ticket"}},"*");
   };
