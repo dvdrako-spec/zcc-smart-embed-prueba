@@ -3,62 +3,85 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Softphone ZCC</title>
+<meta name="robots" content="noindex">
+<title>Softphone · Zoom Contact Center</title>
 <style>
-  html,body{margin:0;height:100%;font-family:system-ui,sans-serif}
-  #estado{font-size:12px;padding:4px 8px;background:#f4f4f4;border-bottom:1px solid #ddd;height:24px}
-  #zoom-embeddable-phone-iframe{width:100%;height:calc(100% - 30px);border:0}
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, "Segoe UI", Arial, sans-serif; background: #fff; }
+  #zoom-embeddable-phone-iframe { display: block; width: 100%; height: 100%; border: 0; }
 </style>
 </head>
 <body>
-<div id="estado">Esperando a Freshservice…</div>
 <script>
-  // Softphone de Zoom en su propia ventana. Habla con la app de Freshservice que la abrió.
-  // Solo acepta órdenes de estos orígenes:
-  const PADRES_PERMITIDOS = ["http://localhost:10001", "https://lanmedia.freshservice.com"];
+  // Página puente del softphone de Zoom Contact Center.
+  // Contiene el marco de Zoom (Smart Embed) y hace de intermediaria con la app de Freshservice
+  // que la carga. No guarda datos ni lleva claves.
+  //
+  // 1) El dominio donde se publique esta página debe estar dado de alta en Zoom
+  //    (Admin > Contact Center Management > Integrations), sin "https://".
+  // 2) Solo obedece órdenes de las páginas de esta lista. Tiene que estar aquí el ORIGEN DE
+  //    LA APP de Freshservice: lo enseña el diagnóstico de la app (Ctrl+Alt+K, primera línea).
+  const PADRES_PERMITIDOS = [
+    "https://lanmedia.freshservice.com",
+    "http://localhost:10001"
+  ];
+
   const BASE_SMART_EMBED = "https://zoom.us/cci/callbar/crm/";
+  const padre = window.parent !== window ? window.parent : null;
+  const estado = { padreOrigen: null };
 
-  const padre = window.opener || (window.parent !== window ? window.parent : null);
-  let padreOrigen = null;
-  const estado = document.getElementById("estado");
+  const marco = document.createElement("iframe");
+  marco.id = "zoom-embeddable-phone-iframe";
+  marco.title = "Softphone de Zoom Contact Center";
+  marco.src = BASE_SMART_EMBED + "?origin=" + location.origin;
+  marco.setAttribute("sandbox", "allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-downloads");
+  marco.setAttribute("allow", ";autoplay;microphone;camera;display-capture;midi;encrypted-media;clipboard-write;");
+  document.body.appendChild(marco);
 
-  const iframe = document.createElement("iframe");
-  iframe.id = "zoom-embeddable-phone-iframe";
-  iframe.src = BASE_SMART_EMBED + "?origin=" + location.origin;
-  iframe.setAttribute("sandbox", "allow-forms allow-popups allow-popups-to-escape-sandbox allow-scripts allow-same-origin allow-downloads");
-  iframe.setAttribute("allow", ";autoplay;microphone;camera;display-capture;midi;encrypted-media;clipboard-write;");
-  document.body.appendChild(iframe);
+  function esZoom(origen) {
+    const m = /^https:\/\/([a-z0-9.-]+)$/i.exec(origen || "");
+    if (!m) return false;
+    const host = m[1].toLowerCase();
+    return host === "zoom.us" || host.endsWith(".zoom.us");
+  }
 
-  const avisarPadre = (msg) => {
-    if (padre && padreOrigen) padre.postMessage(msg, padreOrigen);
-  };
+  function avisarPadre(msg) {
+    if (padre && estado.padreOrigen) padre.postMessage(msg, estado.padreOrigen);
+  }
 
-  window.addEventListener("message", (e) => {
-    // Órdenes de la app de Freshservice
-    if (padre && e.source === padre && PADRES_PERMITIDOS.includes(e.origin)) {
-      padreOrigen = e.origin;
-      const m = e.data;
-      if (m && m.type === "puente-hola") {
-        estado.textContent = "Conectado con Freshservice";
-        avisarPadre({ type: "puente-listo" });
-      }
-      if (m && m.type === "puente-llamar" && m.phone) {
-        estado.textContent = "Llamando (ticket " + m.ticket + ")";
-        iframe.contentWindow.postMessage(
-          { type: "onclicktoact", data: { id: String(m.ticket), name: "Ticket " + m.ticket, phone: String(m.phone), userEntity: "ticket" } }, "*");
-      }
+  function ordenDelPadre(origen, m) {
+    if (!PADRES_PERMITIDOS.includes(origen)) {
+      // Se le dice a quien pregunta que no está en la lista (y nada más), para que la app
+      // pueda enseñar qué origen hay que añadir.
+      padre.postMessage({ type: "puente-no-autorizado", origen: origen }, origen);
       return;
     }
-    // Eventos de Zoom
-    let host = "";
-    try { host = new URL(e.origin).hostname; } catch { return; }
-    if (!host.endsWith("zoom.us")) return;
-    const z = e.data;
-    if (!z || typeof z.type !== "string" || !z.type.startsWith("zcc-")) return;
+    estado.padreOrigen = origen;
+    if (m.type === "puente-hola") avisarPadre({ type: "puente-listo" });
+    // Órdenes para Zoom (contestar, colgar, silencio…): solo las de tipo "zcc-…".
+    if (m.type === "puente-orden" && m.orden && typeof m.orden.type === "string" && m.orden.type.indexOf("zcc-") === 0) {
+      marco.contentWindow.postMessage({ type: m.orden.type, data: m.orden.data || {} }, "*");
+    }
+    if (m.type === "puente-llamar" && m.phone) {
+      const ticket = String(m.ticket || "");
+      marco.contentWindow.postMessage({
+        type: "onclicktoact",
+        data: { id: ticket, name: m.nombre || ("Ticket " + ticket), phone: String(m.phone), userEntity: "ticket" }
+      }, "*");
+    }
+  }
+
+  function avisoDeZoom(z) {
     if (z.type === "zcc-init-config-request") {
-      iframe.contentWindow.postMessage({ type: "zcc-init-config-response", data: { phone: { screenPopEvent: "RINGING" } } }, "*");
+      marco.contentWindow.postMessage({ type: "zcc-init-config-response", data: { phone: { screenPopEvent: "RINGING" } } }, "*");
     }
     avisarPadre({ type: "puente-evento", evento: z.type, data: z.data || null });
+  }
+
+  window.addEventListener("message", function (e) {
+    const m = e.data;
+    if (!m || typeof m.type !== "string") return;
+    if (padre && e.source === padre && m.type.indexOf("puente-") === 0) { ordenDelPadre(e.origin, m); return; }
+    if (esZoom(e.origin) && m.type.indexOf("zcc-") === 0) avisoDeZoom(m);
   });
 </script>
 </body>
